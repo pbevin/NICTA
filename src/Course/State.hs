@@ -152,8 +152,14 @@ firstRepeat ::
   Ord a =>
   List a
   -> Optional a
-firstRepeat xs = fst $ runState (findM p xs) Nil
-  where p x = State (\seen -> (x `elem` seen, x :. seen))
+firstRepeat xs = eval (findM repeated xs) S.empty
+
+repeated :: Ord a => a -> State (S.Set a) Bool
+repeated x = do seen <- get
+                put $ S.insert x seen
+                return (x `S.member` seen)
+
+
 
 -- | Remove all duplicate elements in a `List`.
 -- /Tip:/ Use `filtering` and `State` with a @Data.Set#Set@.
@@ -165,8 +171,11 @@ distinct ::
   Ord a =>
   List a
   -> List a
-distinct xs = fst $ runState (filtering p xs) S.empty
-  where p x = get >>= (\seen -> put (S.insert x seen) >> return (x `S.notMember` seen))
+distinct xs = eval (filtering notRepeated xs) S.empty
+
+notRepeated :: Ord a => a -> State (S.Set a) Bool
+notRepeated = (return . not) <=< repeated
+
 
 -- | A happy number is a positive integer, where the sum of the square of its digits eventually reaches 1 after repetition.
 -- In contrast, a sad number (not a happy number) is where the sum of the square of its digits never reaches 1
@@ -192,5 +201,14 @@ distinct xs = fst $ runState (filtering p xs) S.empty
 isHappy ::
   Integer
   -> Bool
-isHappy =
-  error "todo: Course.State#isHappy"
+isHappy n = case eval (findM repeated (produce sq n)) S.empty of
+              Full x -> x == 1
+              Empty -> False
+
+sq :: Integer -> Integer
+sq = sumOf . map square . digits
+  where sumOf = foldLeft (+) 0
+        square n = n * n
+        digits = unfoldr $ \x -> if x > 0
+                                 then Full (x `mod` 10, x `div` 10)
+                                 else Empty
