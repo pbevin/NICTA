@@ -68,7 +68,7 @@ infixr 1 =<<
   f (a -> b)
   -> f a
   -> f b
-f <*> a = (<$> a) =<< f
+f <*> a = f >>= (\g -> (g <$> a))
 
 infixl 4 <*>
 
