@@ -179,13 +179,9 @@ distinct' ::
   (Ord a, Num a) =>
   List a
   -> List a
-distinct' xs = eval' (f xs) S.empty
-  where f = filtering (\x -> addToSeen x)
-
-addToSeen :: (Ord a, Monad f) => a -> StateT (S.Set a) f Bool
-addToSeen x = do seen <- getT
-                 putT (S.insert x seen)
-                 return $ S.notMember x seen
+distinct' xs =
+  eval' (filtering (\x -> state' (\s ->
+    (S.notMember x s, S.insert x s))) xs) S.empty
 
 
 
@@ -204,9 +200,9 @@ distinctF ::
   (Ord a, Num a) =>
   List a
   -> Optional (List a)
-distinctF xs = evalT (f xs) S.empty
-  where f = filtering (\x -> if x > 100 then failure else addToSeen x)
-        failure = StateT $ const Empty
+distinctF xs =
+  evalT (filtering (\x -> StateT $ \s ->
+    if x > 100 then Empty else Full (S.notMember x s, S.insert x s)) xs) S.empty
 
 
 -- | An `OptionalT` is a functor of an `Optional` value.
@@ -221,29 +217,27 @@ data OptionalT f a =
 -- >>> runOptionalT $ (+1) <$> OptionalT (Full 1 :. Empty :. Nil)
 -- [Full 2,Empty]
 instance Functor f => Functor (OptionalT f) where
-  f <$> a = OptionalT $ g <$> runOptionalT a
-    where g aa = f <$> aa
+  f <$> a = OptionalT $ (f <$>) <$> runOptionalT a
 
 -- | Implement the `Apply` instance for `OptionalT f` given a Apply f.
 --
 -- >>> runOptionalT $ OptionalT (Full (+1) :. Full (+2) :. Nil) <*> OptionalT (Full 1 :. Empty :. Nil)
 -- [Full 2,Empty,Full 3,Empty]
 instance Apply f => Apply (OptionalT f) where
-  (<*>) =
-    error "todo: Course.StateT (<*>)#instance (OptionalT f)"
+  f <*> a = OptionalT $ (<*>) <$> runOptionalT f <*> runOptionalT a
 
 -- | Implement the `Applicative` instance for `OptionalT f` given a Applicative f.
 instance Applicative f => Applicative (OptionalT f) where
-  pure =
-    error "todo: Course.StateT pure#instance (OptionalT f)"
+  pure a = OptionalT $ pure (Full a)
 
 -- | Implement the `Bind` instance for `OptionalT f` given a Monad f.
 --
 -- >>> runOptionalT $ (\a -> OptionalT (Full (a+1) :. Full (a+2) :. Nil)) =<< OptionalT (Full 1 :. Empty :. Nil)
 -- [Full 2,Full 3,Empty]
 instance Monad f => Bind (OptionalT f) where
-  (=<<) =
-    error "todo: Course.StateT (=<<)#instance (OptionalT f)"
+  f =<< a = OptionalT $ (runOptionalT . g) =<< runOptionalT a
+    where g (Full aa) = f aa
+          g Empty = OptionalT $ pure Empty
 
 instance Monad f => Monad (OptionalT f) where
 
@@ -257,24 +251,21 @@ data Logger l a =
 -- >>> (+3) <$> Logger (listh [1,2]) 3
 -- Logger [1,2] 6
 instance Functor (Logger l) where
-  (<$>) =
-    error "todo: Course.StateT (<$>)#instance (Logger l)"
+  f <$> (Logger list a) = Logger list (f a)
 
 -- | Implement the `Apply` instance for `Logger`.
 --
 -- >>> Logger (listh [1,2]) (+7) <*> Logger (listh [3,4]) 3
 -- Logger [1,2,3,4] 10
 instance Apply (Logger l) where
-  (<*>) =
-    error "todo: Course.StateT (<*>)#instance (Logger l)"
+  Logger list1 f <*> Logger list2 a = Logger (list1 ++ list2) (f a)
 
 -- | Implement the `Applicative` instance for `Logger`.
 --
 -- >>> pure "table" :: Logger Int P.String
 -- Logger [] "table"
 instance Applicative (Logger l) where
-  pure =
-    error "todo: Course.StateT pure#instance (Logger l)"
+  pure a = Logger Nil a
 
 -- | Implement the `Bind` instance for `Logger`.
 -- The `bind` implementation must append log values to maintain associativity.
@@ -282,8 +273,7 @@ instance Applicative (Logger l) where
 -- >>> (\a -> Logger (listh [4,5]) (a+3)) =<< Logger (listh [1,2]) 3
 -- Logger [1,2,4,5] 6
 instance Bind (Logger l) where
-  (=<<) =
-    error "todo: Course.StateT (=<<)#instance (Logger l)"
+  f =<< Logger list1 a = let Logger list2 b = f a in Logger (list1 ++ list2) b
 
 instance Monad (Logger l) where
 
@@ -295,8 +285,7 @@ log1 ::
   l
   -> a
   -> Logger l a
-log1 =
-  error "todo: Course.StateT#log1"
+log1 l a = Logger (l :. Nil) a
 
 -- | Remove all duplicate integers from a list. Produce a log as you go.
 -- If there is an element above 100, then abort the entire computation and produce no result.
@@ -316,5 +305,10 @@ distinctG ::
   (Integral a, Show a) =>
   List a
   -> Logger Chars (Optional (List a))
-distinctG =
-  error "todo: Course.StateT#distinctG"
+distinctG xs = runOptionalT $ evalT (filtering (\x -> StateT $ \s -> OptionalT $
+  if x > 100
+  then log1 (fromString $ "aborting > 100: " P.++ show x) Empty
+  else log x (Full (S.notMember x s, S.insert x s))) xs) S.empty
+    where log x = if even x
+                  then log1 (fromString $ "even number: " P.++ show x)
+                  else pure
