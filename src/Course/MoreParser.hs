@@ -388,4 +388,4 @@ betweenSepbyComma ::
   -> Char
   -> Parser a
   -> Parser (List a)
-betweenSepbyComma c1 c2 p = betweenCharTok c1 c2 (sepby p (is ','))
+betweenSepbyComma c1 c2 p = betweenCharTok c1 c2 (sepby p (is ',' >>> spaces))
