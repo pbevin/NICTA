@@ -323,5 +323,64 @@ fromChar _ =
 dollars ::
   Chars
   -> Chars
-dollars =
-  error "todo: Course.Cheque#dollars"
+dollars str = let amt = filter (`elem` "0123456789.") str
+              in dollarsAndCents (dollarsOnly amt) (centsOnly amt)
+
+dollarsOnly :: Chars -> Integer
+dollarsOnly str = read (takeWhile (/= '.') str) ?? 0
+
+centsOnly :: Chars -> Integer
+centsOnly str = case filter (/= '.') $ dropWhile (/= '.') str of
+                  Nil -> 0
+                  (x :. Nil) -> safeRead (x :. "0")
+                  (x1 :. x2 :. _) -> safeRead (x1 :. x2 :. Nil)
+
+dollarsAndCents :: Integer -> Integer -> Chars
+dollarsAndCents dollars cents = unwords $ listh [ toWords dollars,
+                                                  plural dollars "dollar" "dollars",
+                                                  "and", toWords cents,
+                                                  plural cents "cent" "cents" ]
+
+toWords :: Integer -> Chars
+toWords 0 = "zero"
+toWords n = unwords $ reverse $ filter (not . isEmpty) $ zipWith zillion (map small $ unfoldr thousands n) illion
+  where thousands 0 = Empty
+        thousands n = Full (n `mod` 1000, n `div` 1000)
+        zillion a "" = a
+        zillion "zero" _ = ""
+        zillion a b = a ++ " " ++ b
+
+small :: Integer -> Chars
+small n
+  | n < 20    = (units ++ teens) !! n
+  | n < 100   = let (t, u) = (n `div` 10, n `mod` 10)
+                in if u > 0
+                    then tens !! t ++ "-" ++ units !! u
+                    else tens !! t
+  | otherwise = let (h, tu) = (n `div` 100, n `mod` 100)
+                    hundreds = listh [ units !! h, "hundred" ]
+                    tensUnits = listh $ if tu > 0 then ["and", toWords tu] else []
+                in unwords $ hundreds ++ tensUnits
+
+units, teens, tens :: List Chars
+units = listh ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
+teens  = listh ["ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"]
+tens   = listh ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
+
+smallNum :: Integer -> Chars
+smallNum n = (units ++ teens) !! n
+
+safeTail :: List a -> List a
+safeTail Nil = Nil
+safeTail (_ :. xs) = xs
+
+safeRead :: Chars -> Integer
+safeRead str = read str ?? 0
+
+(!!) :: (Num n, Eq n) => List a -> n -> a
+Nil !! _ = error "out of bounds"
+(a :. _) !! 0 = a
+(_ :. as) !! n = as !! (n-1)
+
+plural :: (Num a, Eq a) => a -> b -> b -> b
+plural n one many = if n == 1 then one else many
