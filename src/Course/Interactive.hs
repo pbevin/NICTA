@@ -83,8 +83,10 @@ data Op =
 -- /Tip:/ @putStrLn :: String -> IO ()@ -- Prints a string and then a new line to standard output.
 convertInteractive ::
   IO ()
-convertInteractive =
-  error "todo: Course.Interactive#convertInteractive"
+convertInteractive = vooid $
+  putStr "Enter a string: " >-
+  getLine >>= \line ->
+  putStrLn (map toUpper line)
 
 -- |
 --
@@ -111,8 +113,13 @@ convertInteractive =
 -- /Tip:/ @putStrLn :: String -> IO ()@ -- Prints a string and then a new line to standard output.
 reverseInteractive ::
   IO ()
-reverseInteractive =
-  error "todo: Course.Interactive#reverseInteractive"
+reverseInteractive = vooid $
+  putStr "Input file: " >-
+  getLine >>= \inp ->
+  putStr "Output file: " >-
+  getLine >>= \outp ->
+  readFile inp >>= \content ->
+  writeFile outp (reverse content)
 
 -- |
 --
@@ -138,7 +145,15 @@ reverseInteractive =
 encodeInteractive ::
   IO ()
 encodeInteractive =
-  error "todo: Course.Interactive#encodeInteractive"
+  let encodings = listh [ (' ', "%20"),
+                          ('\t', "%09"),
+                          ('\"', "%22") ]
+      urlencode ch = (lookup ch encodings) ?? (ch :. Nil)
+      lookup a xs = snd <$> find ((== a) . fst) xs
+  in vooid $
+    putStr "String to URLEncode: " >-
+    getLine >>= \str ->
+    putStrLn (flatMap urlencode str)
 
 interactive ::
   IO ()
